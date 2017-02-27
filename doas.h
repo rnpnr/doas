@@ -36,6 +36,10 @@ struct passwd;
 char **prepenv(const struct rule *, const struct passwd *,
     const struct passwd *);
 
+int openpersist(int *valid);
+int setpersist(int fd);
+int clearpersist(void);
+
 #define PERMIT	1
 #define DENY	2
 

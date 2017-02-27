@@ -22,7 +22,6 @@
 .Sh SYNOPSIS
 .Nm doas
 .Op Fl Lns
-.Op Fl a Ar style
 .Op Fl C Ar config
 .Op Fl u Ar user
 .Ar command
@@ -67,14 +66,6 @@ The working directory is not changed.
 .Pp
 The options are as follows:
 .Bl -tag -width tenletters
-.It Fl a Ar style
-Use the specified authentication style when validating the user,
-as allowed by
-.Pa /etc/login.conf .
-A list of doas-specific authentication methods may be configured by adding an
-.Sq auth-doas
-entry in
-.Xr login.conf 5 .
 .It Fl C Ar config
 Parse and check the configuration file
 .Ar config ,

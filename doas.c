@@ -20,8 +20,6 @@
 #include <sys/ioctl.h>
 
 #include <limits.h>
-#include <login_cap.h>
-#include <bsd_auth.h>
 #include <readpassphrase.h>
 #include <string.h>
 #include <stdio.h>
@@ -33,13 +31,22 @@
 #include <syslog.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <shadow.h>
 
 #include "doas.h"
+
+#ifndef UID_MAX
+#define UID_MAX 65535
+#endif
+
+#ifndef GID_MAX
+#define GID_MAX 65535
+#endif
 
 static void __dead
 usage(void)
 {
-	fprintf(stderr, "usage: doas [-Lns] [-a style] [-C config] [-u user]"
+	fprintf(stderr, "usage: doas [-Lns] [-C config] [-u user]"
 	    " command [args]\n");
 	exit(1);
 }
@@ -193,23 +200,36 @@ checkconfig(const char *confpath, int argc, char **argv,
 	}
 }
 
+static int
+verifypasswd(const char *user, const char *pass)
+{
+	struct spwd *sp;
+	char *p1, *p2;
+
+	sp = getspnam(user);
+	if (!sp)
+		return 0;
+	p1 = sp->sp_pwdp;
+	if (p1[0] == '!' || p1[0] == '*')
+		return 0;
+	p2 = crypt(pass, p1);
+	if (!p2)
+		return 0;
+	return strcmp(p1, p2) == 0;
+}
+
 static void
-authuser(char *myname, char *login_style, int persist)
+authuser(char *myname, int persist)
 {
 	char *challenge = NULL, *response, rbuf[1024], cbuf[128];
-	auth_session_t *as;
-	int fd = -1;
+	int fd = -1, valid = 0;
 
-	if (persist)
-		fd = open("/dev/tty", O_RDWR);
-	if (fd != -1) {
-		if (ioctl(fd, TIOCCHKVERAUTH) == 0)
+	if (persist) {
+		fd = openpersist(&valid);
+		if (valid)
 			goto good;
 	}
 
-	if (!(as = auth_userchallenge(myname, login_style, "auth-doas",
-	    &challenge)))
-		errx(1, "Authorization failed");
 	if (!challenge) {
 		char host[HOST_NAME_MAX + 1];
 		if (gethostname(host, sizeof(host)))
@@ -221,21 +241,18 @@ authuser(char *myname, char *login_style, int persist)
 	response = readpassphrase(challenge, rbuf, sizeof(rbuf),
 	    RPP_REQUIRE_TTY);
 	if (response == NULL && errno == ENOTTY) {
-		syslog(LOG_AUTHPRIV | LOG_NOTICE,
-		    "tty required for %s", myname);
+		syslog(LOG_NOTICE, "tty required for %s", myname);
 		errx(1, "a tty is required");
 	}
-	if (!auth_userresponse(as, response, 0)) {
+	if (!verifypasswd(myname, response)) {
 		explicit_bzero(rbuf, sizeof(rbuf));
-		syslog(LOG_AUTHPRIV | LOG_NOTICE,
-		    "failed auth for %s", myname);
+		syslog(LOG_NOTICE, "failed auth for %s", myname);
 		errx(1, "Authorization failed");
 	}
 	explicit_bzero(rbuf, sizeof(rbuf));
 good:
 	if (fd != -1) {
-		int secs = 5 * 60;
-		ioctl(fd, TIOCSETVERAUTH, &secs);
+		setpersist(fd);
 		close(fd);
 	}
 }
@@ -281,15 +298,14 @@ done:
 int
 main(int argc, char **argv)
 {
-	const char *safepath = "/bin:/sbin:/usr/bin:/usr/sbin:"
-	    "/usr/local/bin:/usr/local/sbin";
+	const char *safepath = "/bin";
 	const char *confpath = NULL;
 	char *shargv[] = { NULL, NULL };
 	char *sh;
 	const char *p;
 	const char *cmd;
 	char cmdline[LINE_MAX];
-	char mypwbuf[_PW_BUF_LEN], targpwbuf[_PW_BUF_LEN];
+	char mypwbuf[1024], targpwbuf[1024];
 	struct passwd mypwstore, targpwstore;
 	struct passwd *mypw, *targpw;
 	const struct rule *rule;
@@ -302,28 +318,20 @@ main(int argc, char **argv)
 	int nflag = 0;
 	char cwdpath[PATH_MAX];
 	const char *cwd;
-	char *login_style = NULL;
 	char **envp;
 
 	setprogname("doas");
-
-	closefrom(STDERR_FILENO + 1);
+	openlog("doas", 0, LOG_AUTHPRIV);
 
 	uid = getuid();
 
-	while ((ch = getopt(argc, argv, "a:C:Lnsu:")) != -1) {
+	while ((ch = getopt(argc, argv, "C:Lnsu:")) != -1) {
 		switch (ch) {
-		case 'a':
-			login_style = optarg;
-			break;
 		case 'C':
 			confpath = optarg;
 			break;
 		case 'L':
-			i = open("/dev/tty", O_RDWR);
-			if (i != -1)
-				ioctl(i, TIOCCLRVERAUTH);
-			exit(i == -1);
+			exit(clearpersist() != 0);
 		case 'u':
 			if (parseuid(optarg, &target) != 0)
 				errx(1, "unknown user");
@@ -391,16 +399,16 @@ main(int argc, char **argv)
 	cmd = argv[0];
 	if (!permit(uid, groups, ngroups, &rule, target, cmd,
 	    (const char **)argv + 1)) {
-		syslog(LOG_AUTHPRIV | LOG_NOTICE,
-		    "failed command for %s: %s", mypw->pw_name, cmdline);
-		errc(1, EPERM, NULL);
+		syslog(LOG_NOTICE, "failed command for %s: %s", mypw->pw_name, cmdline);
+		errno = EPERM;
+		err(1, NULL);
 	}
 
 	if (!(rule->options & NOPASS)) {
 		if (nflag)
 			errx(1, "Authorization required");
 
-		authuser(mypw->pw_name, login_style, rule->options & PERSIST);
+		authuser(mypw->pw_name, rule->options & PERSIST);
 	}
 
 	if ((p = getenv("PATH")) != NULL)
@@ -427,11 +435,12 @@ main(int argc, char **argv)
 	if (targpw == NULL)
 		errx(1, "no passwd entry for target");
 
-	if (setusercontext(NULL, targpw, target, LOGIN_SETGROUP |
-	    LOGIN_SETPATH |
-	    LOGIN_SETPRIORITY | LOGIN_SETRESOURCES | LOGIN_SETUMASK |
-	    LOGIN_SETUSER) != 0)
-		errx(1, "failed to set user context for target");
+	if (initgroups(targpw->pw_name, targpw->pw_gid) < 0)
+		err(1, "initgroups");
+	if (setgid(targpw->pw_gid) < 0)
+		err(1, "setgid");
+	if (setuid(targpw->pw_uid) < 0)
+		err(1, "setuid");
 
 	if (pledge("stdio rpath exec", NULL) == -1)
 		err(1, "pledge");
@@ -444,7 +453,7 @@ main(int argc, char **argv)
 	if (pledge("stdio exec", NULL) == -1)
 		err(1, "pledge");
 
-	syslog(LOG_AUTHPRIV | LOG_INFO, "%s ran command %s as %s from %s",
+	syslog(LOG_INFO, "%s ran command %s as %s from %s",
 	    mypw->pw_name, cmdline, targpw->pw_name, cwd);
 
 	envp = prepenv(rule, mypw, targpw);
