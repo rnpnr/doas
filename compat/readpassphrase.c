@@ -183,16 +183,8 @@ restart:
 }
 DEF_WEAK(readpassphrase);
 
-char *
-getpass(const char *prompt)
+static void
+handler(int s)
 {
-	static char buf[_PASSWORD_LEN + 1];
-
-	return(readpassphrase(prompt, buf, sizeof(buf), RPP_ECHO_OFF));
-}
-
-static void handler(int s)
-{
-
 	signo[s] = 1;
 }
