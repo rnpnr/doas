@@ -102,7 +102,7 @@ openpersist(int *valid)
 		*valid = clock_gettime(CLOCK_BOOTTIME, &ts) == 0 &&
 		         fstat(fd, &st) == 0 &&
 		         (ts.tv_sec < st.st_mtim.tv_sec ||
-		          ts.tv_sec == st.st_mtim.tv_sec && ts.tv_nsec < st.st_mtim.tv_nsec) &&
+		          (ts.tv_sec == st.st_mtim.tv_sec && ts.tv_nsec < st.st_mtim.tv_nsec)) &&
 		         st.st_mtime - ts.tv_sec <= PERSIST_TIMEOUT;
 	}
 	return fd;
