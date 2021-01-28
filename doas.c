@@ -1,4 +1,4 @@
-/* $OpenBSD: doas.c,v 1.82 2019/10/18 17:15:45 tedu Exp $ */
+/* $OpenBSD: doas.c,v 1.89 2021/01/27 17:02:50 millert Exp $ */
 /*
  * Copyright (c) 2015 Ted Unangst <tedu@openbsd.org>
  *
@@ -143,7 +143,7 @@ static int
 permit(uid_t uid, gid_t *groups, int ngroups, const struct rule **lastr,
     uid_t target, const char *cmd, const char **cmdargs)
 {
-	int i;
+	size_t i;
 
 	*lastr = NULL;
 	for (i = 0; i < nrules; i++) {
@@ -190,6 +190,8 @@ checkconfig(const char *confpath, int argc, char **argv,
 	const struct rule *rule;
 
 	setresuid(uid, uid, uid);
+	if (pledge("stdio rpath getpw", NULL) == -1)
+		err(1, "pledge");
 	parseconfig(confpath, 0);
 	if (!argc)
 		exit(0);
@@ -251,7 +253,7 @@ authuser(char *myname, int persist)
 	if (!verifypasswd(myname, response)) {
 		explicit_bzero(rbuf, sizeof(rbuf));
 		syslog(LOG_NOTICE, "failed auth for %s", myname);
-		errx(1, "Authorization failed");
+		errx(1, "Authentication failed");
 	}
 	explicit_bzero(rbuf, sizeof(rbuf));
 good:
@@ -381,6 +383,8 @@ main(int argc, char **argv)
 	}
 
 	if (confpath) {
+		if (pledge("stdio rpath getpw id", NULL) == -1)
+			err(1, "pledge");
 		checkconfig(confpath, argc, argv, uid, groups, ngroups,
 		    target);
 		exit(1);	/* fail safe */
@@ -410,7 +414,7 @@ main(int argc, char **argv)
 
 	if (!(rule->options & NOPASS)) {
 		if (nflag)
-			errx(1, "Authorization required");
+			errx(1, "Authentication required");
 
 		authuser(mypw->pw_name, rule->options & PERSIST);
 	}
@@ -457,8 +461,10 @@ main(int argc, char **argv)
 	if (pledge("stdio exec", NULL) == -1)
 		err(1, "pledge");
 
-	syslog(LOG_INFO, "%s ran command %s as %s from %s",
-	    mypw->pw_name, cmdline, targpw->pw_name, cwd);
+	if (!(rule->options & NOLOG)) {
+		syslog(LOG_INFO, "%s ran command %s as %s from %s",
+		    mypw->pw_name, cmdline, targpw->pw_name, cwd);
+	}
 
 	envp = prepenv(rule, mypw, targpw);
 
