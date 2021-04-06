@@ -264,51 +264,11 @@ good:
 }
 
 int
-unveilcommands(const char *ipath, const char *cmd)
-{
-	char *path = NULL, *p;
-	int unveils = 0;
-
-	if (strchr(cmd, '/') != NULL) {
-		if (unveil(cmd, "x") != -1)
-			unveils++;
-		goto done;
-	}
-
-	if (!ipath) {
-		errno = ENOENT;
-		goto done;
-	}
-	path = strdup(ipath);
-	if (!path) {
-		errno = ENOENT;
-		goto done;
-	}
-	for (p = path; p && *p; ) {
-		char buf[PATH_MAX];
-		char *cp = strsep(&p, ":");
-
-		if (cp) {
-			int r = snprintf(buf, sizeof buf, "%s/%s", cp, cmd);
-			if (r >= 0 && r < sizeof buf) {
-				if (unveil(buf, "x") != -1)
-					unveils++;
-			}
-		}
-	}
-done:
-	free(path);
-	return (unveils);
-}
-
-int
 main(int argc, char **argv)
 {
-	const char *safepath = "/bin";
 	const char *confpath = NULL;
 	char *shargv[] = { NULL, NULL };
 	char *sh;
-	const char *p;
 	const char *cmd;
 	char cmdline[LINE_MAX];
 	char mypwbuf[1024], targpwbuf[1024];
@@ -419,35 +379,17 @@ main(int argc, char **argv)
 		authuser(mypw->pw_name, rule->options & PERSIST);
 	}
 
-	if ((p = getenv("PATH")) != NULL)
-		formerpath = strdup(p);
-	if (formerpath == NULL)
-		formerpath = "";
-
-	if (unveil(_PATH_LOGIN_CONF, "r") == -1 ||
-	    unveil(_PATH_LOGIN_CONF ".db", "r") == -1)
-		err(1, "unveil");
-	if (rule->cmd) {
-		if (setenv("PATH", safepath, 1) == -1)
-			err(1, "failed to set PATH '%s'", safepath);
-	}
-	if (unveilcommands(getenv("PATH"), cmd) == 0)
-		goto fail;
-
-	if (pledge("stdio rpath getpw exec id", NULL) == -1)
-		err(1, "pledge");
-
 	rv = getpwuid_r(target, &targpwstore, targpwbuf, sizeof(targpwbuf), &targpw);
 	if (rv != 0)
 		err(1, "getpwuid_r failed");
 	if (targpw == NULL)
 		errx(1, "no passwd entry for target");
 
-	if (initgroups(targpw->pw_name, targpw->pw_gid) < 0)
+	if (initgroups(targpw->pw_name, targpw->pw_gid) == -1)
 		err(1, "initgroups");
-	if (setgid(targpw->pw_gid) < 0)
+	if (setgid(targpw->pw_gid) == -1)
 		err(1, "setgid");
-	if (setuid(targpw->pw_uid) < 0)
+	if (setuid(targpw->pw_uid) == -1)
 		err(1, "setuid");
 
 	if (pledge("stdio rpath exec", NULL) == -1)
@@ -468,16 +410,11 @@ main(int argc, char **argv)
 
 	envp = prepenv(rule, mypw, targpw);
 
-	/* setusercontext set path for the next process, so reset it for us */
 	if (rule->cmd) {
 		if (setenv("PATH", safepath, 1) == -1)
 			err(1, "failed to set PATH '%s'", safepath);
-	} else {
-		if (setenv("PATH", formerpath, 1) == -1)
-			err(1, "failed to set PATH '%s'", formerpath);
 	}
 	execvpe(cmd, argv, envp);
-fail:
 	if (errno == ENOENT)
 		errx(1, "%s: command not found", cmd);
 	err(1, "%s", cmd);

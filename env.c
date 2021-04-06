@@ -28,7 +28,7 @@
 
 #include "doas.h"
 
-const char *formerpath;
+const char *safepath = "/bin";
 
 struct envnode {
 	RB_ENTRY(envnode) node;
@@ -103,7 +103,7 @@ createenv(const struct rule *rule, const struct passwd *mypw,
 	addnode(env, "DOAS_USER", mypw->pw_name);
 	addnode(env, "HOME", targpw->pw_dir);
 	addnode(env, "LOGNAME", targpw->pw_name);
-	addnode(env, "PATH", getenv("PATH"));
+	addnode(env, "PATH", safepath);
 	addnode(env, "SHELL", targpw->pw_shell);
 	addnode(env, "USER", targpw->pw_name);
 
@@ -200,17 +200,10 @@ fillenv(struct env *env, const char **envlist)
 		/* assign value or inherit from environ */
 		if (eq) {
 			val = eq + 1;
-			if (*val == '$') {
-				if (strcmp(val + 1, "PATH") == 0)
-					val = formerpath;
-				else
-					val = getenv(val + 1);
-			}
+			if (*val == '$')
+				val = getenv(val + 1);
 		} else {
-			if (strcmp(name, "PATH") == 0)
-				val = formerpath;
-			else
-				val = getenv(name);
+			val = getenv(name);
 		}
 		/* at last, we have something to insert */
 		if (val) {

@@ -29,7 +29,7 @@ extern struct rule **rules;
 extern size_t nrules;
 extern int parse_errors;
 
-extern const char *formerpath;
+extern const char *safepath;
 
 struct passwd;
 
