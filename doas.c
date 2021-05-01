@@ -367,7 +367,7 @@ main(int argc, char **argv)
 	cmd = argv[0];
 	if (!permit(uid, groups, ngroups, &rule, target, cmd,
 	    (const char **)argv + 1)) {
-		syslog(LOG_NOTICE, "failed command for %s: %s", mypw->pw_name, cmdline);
+		syslog(LOG_NOTICE, "command not permitted for %s: %s", mypw->pw_name, cmdline);
 		errno = EPERM;
 		err(1, NULL);
 	}
