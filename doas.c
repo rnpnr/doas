@@ -1,4 +1,4 @@
-/* $OpenBSD: doas.c,v 1.89 2021/01/27 17:02:50 millert Exp $ */
+/* $OpenBSD: doas.c,v 1.92 2021/10/13 17:41:14 millert Exp $ */
 /*
  * Copyright (c) 2015 Ted Unangst <tedu@openbsd.org>
  *
@@ -224,17 +224,10 @@ verifypasswd(const char *user, const char *pass)
 	return strcmp(p1, p2) == 0;
 }
 
-static void
-authuser(char *myname, int persist)
+static int
+authuser_checkpass(char *myname)
 {
 	char *challenge = NULL, *response, rbuf[1024], cbuf[128];
-	int fd = -1, valid = 0;
-
-	if (persist) {
-		fd = openpersist(&valid);
-		if (valid)
-			goto good;
-	}
 
 	if (!challenge) {
 		char host[HOST_NAME_MAX + 1];
@@ -253,9 +246,28 @@ authuser(char *myname, int persist)
 	if (!verifypasswd(myname, response)) {
 		explicit_bzero(rbuf, sizeof(rbuf));
 		syslog(LOG_NOTICE, "failed auth for %s", myname);
-		errx(1, "Authentication failed");
+		warnx("Authentication failed");
+		return AUTH_FAILED;
 	}
 	explicit_bzero(rbuf, sizeof(rbuf));
+	return AUTH_OK;
+}
+
+static void
+authuser(char *myname, int persist)
+{
+	int i, fd = -1, valid = 0;
+
+	if (persist) {
+		fd = openpersist(&valid);
+		if (valid)
+			goto good;
+	}
+	for (i = 0; i < AUTH_RETRIES; i++) {
+		if (authuser_checkpass(myname) == AUTH_OK)
+			goto good;
+	}
+	exit(1);
 good:
 	if (fd != -1) {
 		setpersist(fd);

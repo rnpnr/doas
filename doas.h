@@ -1,4 +1,4 @@
-/* $OpenBSD: doas.h,v 1.17 2021/01/27 17:02:50 millert Exp $ */
+/* $OpenBSD: doas.h,v 1.18 2021/09/07 13:46:07 jcs Exp $ */
 /*
  * Copyright (c) 2015 Ted Unangst <tedu@openbsd.org>
  *
@@ -47,3 +47,7 @@ int clearpersist(void);
 #define KEEPENV		0x2
 #define PERSIST		0x4
 #define NOLOG		0x8
+
+#define AUTH_FAILED	-1
+#define AUTH_OK		0
+#define AUTH_RETRIES	3
