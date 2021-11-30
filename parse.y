@@ -18,6 +18,7 @@
 %{
 #include <sys/types.h>
 #include <ctype.h>
+#include <limits.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -40,8 +41,8 @@ typedef struct {
 		const char **strlist;
 		const char *str;
 	};
-	int lineno;
-	int colno;
+	unsigned int lineno;
+	unsigned int colno;
 } yystype;
 #define YYSTYPE yystype
 
@@ -51,7 +52,7 @@ struct rule **rules;
 size_t nrules;
 static size_t maxrules;
 
-int parse_errors = 0;
+int parse_error = 0;
 
 static void yyerror(const char *, ...);
 static int yylex(void);
@@ -199,8 +200,8 @@ yyerror(const char *fmt, ...)
 	va_start(va, fmt);
 	vfprintf(stderr, fmt, va);
 	va_end(va);
-	fprintf(stderr, " at line %d\n", yylval.lineno + 1);
-	parse_errors++;
+	fprintf(stderr, " at line %lu\n", yylval.lineno + 1);
+	parse_error = 1;
 }
 
 static struct keyword {
@@ -223,7 +224,8 @@ int
 yylex(void)
 {
 	char buf[1024], *ebuf, *p, *str;
-	int c, quotes = 0, escape = 0, qpos = -1, nonkw = 0;
+	int c, quoted = 0, quotes = 0, qerr = 0, escape = 0, nonkw = 0;
+	unsigned long qpos = 0;
 	size_t i;
 
 	p = buf;
@@ -259,7 +261,7 @@ repeat:
 	for (;; c = getc(yyfp), yylval.colno++) {
 		switch (c) {
 		case '\0':
-			yyerror("unallowed character NUL in column %d",
+			yyerror("unallowed character NUL in column %lu",
 			    yylval.colno + 1);
 			escape = 0;
 			continue;
@@ -269,26 +271,27 @@ repeat:
 				continue;
 			break;
 		case '\n':
-			if (quotes)
-				yyerror("unterminated quotes in column %d",
+			if (quotes && !qerr) {
+				yyerror("unterminated quotes in column %lu",
 				    qpos + 1);
+				qerr = 1;
+			}
 			if (escape) {
 				nonkw = 1;
 				escape = 0;
-				yylval.colno = 0;
+				yylval.colno = ULONG_MAX;
 				yylval.lineno++;
 				continue;
 			}
 			goto eow;
 		case EOF:
 			if (escape)
-				yyerror("unterminated escape in column %d",
+				yyerror("unterminated escape in column %lu",
 				    yylval.colno);
-			if (quotes)
-				yyerror("unterminated quotes in column %d",
+			if (quotes && !qerr)
+				yyerror("unterminated quotes in column %lu",
 				    qpos + 1);
 			goto eow;
-			/* FALLTHROUGH */
 		case '{':
 		case '}':
 		case '#':
@@ -299,9 +302,11 @@ repeat:
 			break;
 		case '"':
 			if (!escape) {
+				quoted = 1;
 				quotes = !quotes;
 				if (quotes) {
 					nonkw = 1;
+					qerr = 0;
 					qpos = yylval.colno;
 				}
 				continue;
@@ -327,7 +332,7 @@ eow:
 		 */
 		if (c == EOF)
 			goto eof;
-		else if (qpos == -1)    /* accept, e.g., empty args: cmd foo args "" */
+		else if (!quoted)    /* accept, e.g., empty args: cmd foo args "" */
 			goto repeat;
 	}
 	if (!nonkw) {

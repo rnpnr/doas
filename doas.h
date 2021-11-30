@@ -27,7 +27,7 @@ struct rule {
 
 extern struct rule **rules;
 extern size_t nrules;
-extern int parse_errors;
+extern int parse_error;
 
 extern const char *safepath;
 
