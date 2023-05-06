@@ -31,12 +31,16 @@ install: doas
 	mkdir -p $(DESTDIR)$(PREFIX)/bin
 	cp -f doas $(DESTDIR)$(PREFIX)/bin
 	chmod 4555 $(DESTDIR)$(PREFIX)/bin/doas
+	mkdir -p $(DESTDIR)$(MANPREFIX)/man1
+	cp doas.1 $(DESTDIR)$(MANPREFIX)/man1/
+	chmod 644 $(DESTDIR)$(MANPREFIX)/man1/doas.1
 	mkdir -p $(DESTDIR)$(MANPREFIX)/man5
 	cp doas.conf.5 $(DESTDIR)$(MANPREFIX)/man5/
 	chmod 644 $(DESTDIR)$(MANPREFIX)/man5/doas.conf.5
 
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/doas
+	rm -f $(DESTDIR)$(MANPREFIX)/man1/doas.1
 	rm -f $(DESTDIR)$(MANPREFIX)/man5/doas.conf.5
 
 .PHONY: all clean install uninstall
