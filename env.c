@@ -110,7 +110,7 @@ createenv(const struct rule *rule, const struct passwd *mypw,
 	fillenv(env, copyset);
 
 	if (rule->options & KEEPENV) {
-		extern const char **environ;
+		extern char **environ;
 
 		for (i = 0; environ[i] != NULL; i++) {
 			struct envnode *node;

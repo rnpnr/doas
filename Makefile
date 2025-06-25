@@ -3,7 +3,8 @@
 PREFIX = /usr/local
 MANPREFIX = $(PREFIX)/share/man
 
-CFLAGS = -O2 -Icompat -D_BSD_SOURCE
+CC      = cc
+CFLAGS  = -std=c11 -march=native -O3 -Icompat -D_GNU_SOURCE -D 'DEF_WEAK(n)=_Static_assert(1, "")'
 LDFLAGS = -s -static
 
 SRC = doas.c env.c persist.c y.tab.c\

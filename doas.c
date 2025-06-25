@@ -1,4 +1,4 @@
-/* $OpenBSD: doas.c,v 1.98 2022/12/22 19:53:22 kn Exp $ */
+/* $OpenBSD: doas.c,v 1.99 2024/02/15 18:57:58 tedu Exp $ */
 /*
  * Copyright (c) 2015 Ted Unangst <tedu@openbsd.org>
  *
@@ -152,8 +152,10 @@ permit(uid_t uid, gid_t *groups, int ngroups, const struct rule **lastr,
 			*lastr = rules[i];
 	}
 	if (!*lastr)
+		return -1;
+	if ((*lastr)->action == PERMIT)
 		return 0;
-	return (*lastr)->action == PERMIT;
+	return -1;
 }
 
 static void
@@ -188,6 +190,7 @@ checkconfig(const char *confpath, int argc, char **argv,
     uid_t uid, gid_t *groups, int ngroups, uid_t target)
 {
 	const struct rule *rule;
+	int rv;
 
 	setresuid(uid, uid, uid);
 	if (pledge("stdio rpath getpw", NULL) == -1)
@@ -195,9 +198,8 @@ checkconfig(const char *confpath, int argc, char **argv,
 	parseconfig(confpath, 0);
 	if (!argc)
 		exit(0);
-
-	if (permit(uid, groups, ngroups, &rule, target, argv[0],
-	    (const char **)argv + 1)) {
+	rv = permit(uid, groups, ngroups, &rule, target, argv[0], (const char **)argv + 1);
+	if (rv == 0) {
 		printf("permit%s\n", (rule->options & NOPASS) ? " nopass" : "");
 		exit(0);
 	} else {
@@ -378,8 +380,8 @@ main(int argc, char **argv)
 	}
 
 	cmd = argv[0];
-	if (!permit(uid, groups, ngroups, &rule, target, cmd,
-	    (const char **)argv + 1)) {
+	rv = permit(uid, groups, ngroups, &rule, target, cmd, (const char **)argv + 1);
+	if (rv != 0) {
 		syslog(LOG_NOTICE, "command not permitted for %s: %s", mypw->pw_name, cmdline);
 		errno = EPERM;
 		err(1, NULL);

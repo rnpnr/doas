@@ -1,4 +1,4 @@
-/* $OpenBSD: doas.h,v 1.18 2021/09/07 13:46:07 jcs Exp $ */
+/* $OpenBSD: doas.h,v 1.20 2024/02/15 18:57:58 tedu Exp $ */
 /*
  * Copyright (c) 2015 Ted Unangst <tedu@openbsd.org>
  *
@@ -40,7 +40,7 @@ int openpersist(int *valid);
 int setpersist(int fd);
 int clearpersist(void);
 
-#define PERMIT	1
+#define PERMIT	-1
 #define DENY	2
 
 #define NOPASS		0x1
